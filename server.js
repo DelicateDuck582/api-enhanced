@@ -212,7 +212,8 @@ async function constructServer(moduleDefs) {
           ? { 'Access-Control-Allow-Origin': corsAllowOrigin }
           : {}),
         ...(shouldSetVaryHeader ? { Vary: 'Origin' } : {}),
-        'Access-Control-Allow-Headers': 'X-Requested-With,Content-Type',
+        'Access-Control-Allow-Headers':
+          'X-Requested-With,Content-Type,Authorization,X-Netease-Cookie,X-SPlayer-Cookie',
         'Access-Control-Allow-Methods': 'PUT,POST,GET,DELETE,OPTIONS',
         'Content-Type': 'application/json; charset=utf-8',
       })
@@ -291,9 +292,18 @@ async function constructServer(moduleDefs) {
         }
       })
 
+      // 支持通过请求头传递登录 Cookie：
+      // 浏览器无法自定义 `Cookie` 头，故提供 `X-Netease-Cookie`（已加入 CORS 允许头），
+      // 便于客户端避免把 MUSIC_U 放进 URL / 查询参数（减少凭据进入访问日志的风险）。
+      const headerCookie =
+        req.headers['x-netease-cookie'] || req.headers['x-splayer-cookie']
+
       let query = Object.assign(
         {},
         { cookie: req.cookies },
+        typeof headerCookie === 'string' && headerCookie
+          ? { cookie: cookieToJson(decode(headerCookie)) }
+          : {},
         req.query,
         req.body,
         req.files,

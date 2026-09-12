@@ -7,6 +7,7 @@
 const logger = require('../util/logger.js')
 const createOption = require('../util/option.js')
 const { cookieToJson } = require('../util/index.js')
+const retryOnEmptyUrl = require('../util/song-url-retry.js')
 module.exports = async (query, request) => {
   const {
     matchID,
@@ -17,7 +18,6 @@ module.exports = async (query, request) => {
     level: query.level,
     encodeType: 'flac',
   }
-  const options = createOption(query, 'xeapi')
   if (query.unblock === 'true') {
     try {
       const result = await matchID(query.id, query.source)
@@ -56,14 +56,27 @@ module.exports = async (query, request) => {
   if (data.level == 'sky') {
     data.immerseType = query.immerseType || 'c51'
   }
-  if (data.level == 'vivid') {
-    data.encodeType = 'mp3'
-    const cookie = options.cookie
-    options.cookie = {
-      ...(typeof cookie === 'string' ? cookieToJson(cookie) : cookie),
-      os: 'android',
-      appver: '9.5.61',
+  /**
+   * 构造请求选项（保留上游的臻音全景声处理：需 android 身份）
+   * @param {object} q 查询参数
+   * @returns {object} 请求选项
+   */
+  const buildOptions = (q) => {
+    const options = createOption(q, 'xeapi')
+    if (data.level == 'vivid') {
+      data.encodeType = 'mp3'
+      const cookie = options.cookie
+      options.cookie = {
+        ...(typeof cookie === 'string' ? cookieToJson(cookie) : cookie),
+        os: 'android',
+        appver: '9.5.61',
+      }
     }
+    return options
   }
-  return request(`/api/song/enhance/player/url/v1`, data, options)
+  // 出口 IP 被风控时（url 为空）自动以随机国内 IP 重试一次
+  return retryOnEmptyUrl(
+    (q) => request(`/api/song/enhance/player/url/v1`, data, buildOptions(q)),
+    query,
+  )
 }
