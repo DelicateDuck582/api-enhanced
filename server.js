@@ -213,8 +213,12 @@ async function constructServer(moduleDefs) {
           : {}),
         ...(shouldSetVaryHeader ? { Vary: 'Origin' } : {}),
         'Access-Control-Allow-Headers':
-          'X-Requested-With,Content-Type,Authorization,X-Netease-Cookie,X-SPlayer-Cookie',
+          'X-Requested-With,Content-Type,X-Netease-Cookie,X-SPlayer-Cookie',
         'Access-Control-Allow-Methods': 'PUT,POST,GET,DELETE,OPTIONS',
+        // 预检结果缓存 10 分钟：
+        // 自定义请求头（如 X-Netease-Cookie）会触发 CORS 预检，
+        // 未设置 Max-Age 时浏览器几乎每次请求都要先发一次 OPTIONS（默认仅缓存 5s）
+        'Access-Control-Max-Age': '600',
         'Content-Type': 'application/json; charset=utf-8',
       })
     }

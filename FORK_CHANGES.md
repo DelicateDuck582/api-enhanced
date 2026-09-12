@@ -36,6 +36,10 @@ curl -H "X-Netease-Cookie: MUSIC_U=xxxxxxxx;os=pc;" https://<api>/user/account
 # 等价于 ?cookie=MUSIC_U%3Dxxxxxxxx%3Bos%3Dpc%3B
 ```
 
+**配套改动（2026-09-12 追加）**：
+- 服务端允许的头最小化：`X-Requested-With,Content-Type,X-Netease-Cookie,X-SPlayer-Cookie`
+- 新增 `Access-Control-Max-Age: 600`：自定义请求头会触发 CORS 预检，未设置 Max-Age 时浏览器几乎每次请求都要先发一次 OPTIONS（实测某次页面加载 67 个 API 请求 → 28 次预检）；设置后可缓存 10 分钟
+
 ## 部署提示
 
 - 云环境（Vercel / Cloudflare 等）建议同时设置环境变量 `ENABLE_RANDOM_CN_IP=true`：
