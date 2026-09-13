@@ -190,12 +190,31 @@ async function constructServer(moduleDefs) {
   const app = express()
   const { CORS_ALLOW_ORIGIN } = process.env
   const allowOrigins = parseCorsAllowOrigins(CORS_ALLOW_ORIGIN)
+  if (!allowOrigins || allowOrigins.includes('*')) {
+    logger.warn(
+      '[CORS] CORS_ALLOW_ORIGIN 未配置或为 *，任意站点均可调用本 API。' +
+        '如需收紧，请设置 CORS_ALLOW_ORIGIN=https://your-site.example（支持逗号分隔的白名单）。',
+    )
+  }
   app.set('trust proxy', true)
 
   /**
    * Serving static files
    */
   app.use(express.static(path.join(__dirname, 'public')))
+  /**
+   * 日志脱敏：抹掉 URL 查询串中的登录凭据
+   *
+   * 历史问题：客户端在部分场景把登录 Cookie 放在 `?cookie=` 查询参数中，
+   * 直接记录 `req.originalUrl` 会让 MUSIC_U 等凭据明文进入 stdout 与日志聚合系统。
+   */
+  const maskSensitiveQuery = (url = '') => {
+    return decode(String(url)).replace(
+      /((?:[?&])(?:cookie|COOKIE|MUSIC_U|__csrf|password|token)=)[^&]*/g,
+      '$1***',
+    )
+  }
+
   /**
    * CORS & Preflight request
    */
@@ -206,8 +225,11 @@ async function constructServer(moduleDefs) {
         req.headers.origin,
       )
       const shouldSetVaryHeader = corsAllowOrigin && corsAllowOrigin !== '*'
+      // 注意：不要下发 Access-Control-Allow-Credentials。
+      // 客户端（SPlayer）使用 withCredentials: false + 显式凭据（X-Netease-Cookie）访问，
+      // 并不需要该响应头；而它与 `Access-Control-Allow-Origin: *` 同时出现既违反
+      // CORS 规范，也会把「任意源可携带凭证调用本 API」的语义暴露出去。
       res.set({
-        'Access-Control-Allow-Credentials': true,
         ...(corsAllowOrigin
           ? { 'Access-Control-Allow-Origin': corsAllowOrigin }
           : {}),
@@ -343,7 +365,7 @@ async function constructServer(moduleDefs) {
         })
         const displayCrypto = usedCrypto || (APP_CONF.encrypt ? 'eapi' : 'api')
         logger.info(
-          `Request Success: [${displayCrypto}] ${decode(req.originalUrl)}`,
+          `Request Success: [${displayCrypto}] ${maskSensitiveQuery(req.originalUrl)}`,
         )
 
         // 夹带私货部分：如果开启了通用解锁，并且是获取歌曲URL的接口，则尝试解锁（如果需要的话）ヾ(≧▽≦*)o
@@ -398,7 +420,7 @@ async function constructServer(moduleDefs) {
 
         res.status(moduleResponse.status).send(moduleResponse.body)
       } catch (/** @type {*} */ moduleResponse) {
-        logger.error(`${decode(req.originalUrl)}`, {
+        logger.error(`${maskSensitiveQuery(req.originalUrl)}`, {
           status: moduleResponse.status,
           body: moduleResponse.body,
         })
